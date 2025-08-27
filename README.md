@@ -26,7 +26,7 @@ python geoip_acl_downloader.py --acl BR
 python geoip_acl_downloader.py --acl BR --verbose
 
 # Baixar redes BR com nomes de arquivo personalizados
-python geoip_acl_downloader.py --acl DE --ipv4 brasil_v4.txt --ipv6 brasil_v6.txt
+python geoip_acl_downloader.py --acl BR --ipv4 brasil_v4.txt --ipv6 brasil_v6.txt
 
 # Versão Rápida (Sem Filtragem)
 python geoip_acl_downloader.py --acl BR --no-filter
