@@ -22,11 +22,14 @@ Uma ferramenta Python poderosa que baixa e processa faixas de redes IP para qual
 # Baixar redes IP brasileiras
 python geoip_acl_downloader.py --acl BR
 
-# Baixar redes dos EUA com logging verbose
-python geoip_acl_downloader.py --acl US --verbose
+# Baixar redes BR com logging verbose
+python geoip_acl_downloader.py --acl BR --verbose
 
-# Baixar redes alemãs com nomes de arquivo personalizados
-python geoip_acl_downloader.py --acl DE --ipv4 alemanha_v4.txt --ipv6 alemanha_v6.txt
+# Baixar redes BR com nomes de arquivo personalizados
+python geoip_acl_downloader.py --acl DE --ipv4 brasil_v4.txt --ipv6 brasil_v6.txt
+
+# Teste simples
+python geoip_acl_downloader.py --help
 ```
 
 ## 📋 Requisitos
