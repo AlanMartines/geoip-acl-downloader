@@ -17,10 +17,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-# Configure logger (will be set up in main)
-logger = logging.getLogger(__name__)
-
-
 class GeoIPACLDownloader:
     """Downloads and processes IP networks for specified countries from GeoIP sources."""
     
@@ -42,6 +38,7 @@ class GeoIPACLDownloader:
         self.country_code = country_code.upper()
         self.urls = urls or self.DEFAULT_URLS
         self.timeout = timeout
+        self.logger = logging.getLogger(__name__)
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': f'GeoIP-ACL-Downloader/1.0 (Python) Country/{self.country_code}'
@@ -58,13 +55,13 @@ class GeoIPACLDownloader:
             Downloaded content or None if failed.
         """
         try:
-            logger.info(f"Downloading from: {url}")
+            self.logger.info(f"Downloading from: {url}")
             response = self.session.get(url, timeout=self.timeout)
             response.raise_for_status()
-            logger.info(f"Successfully downloaded {len(response.text)} characters from {url}")
+            self.logger.info(f"Successfully downloaded {len(response.text)} characters from {url}")
             return response.text
         except requests.RequestException as e:
-            logger.error(f"Failed to download from {url}: {e}")
+            self.logger.error(f"Failed to download from {url}: {e}")
             return None
     
     def parse_acl_content(self, content: str) -> Set[ipaddress.IPv4Network | ipaddress.IPv6Network]:
@@ -88,13 +85,13 @@ class GeoIPACLDownloader:
             # Check for start of country block
             if acl_pattern in line:
                 in_country_block = True
-                logger.debug(f"Found {self.country_code} block at line {line_num}")
+                self.logger.debug(f"Found {self.country_code} block at line {line_num}")
                 continue
             
             # Check for end of block
             if "}" in line and in_country_block:
                 in_country_block = False
-                logger.debug(f"End of {self.country_code} block at line {line_num}")
+                self.logger.debug(f"End of {self.country_code} block at line {line_num}")
                 continue
             
             # Process IP networks within country block
@@ -105,7 +102,7 @@ class GeoIPACLDownloader:
                         ip_obj = ipaddress.ip_network(ip_str, strict=False)
                         networks.add(ip_obj)
                     except ValueError as e:
-                        logger.warning(f"Invalid IP network '{ip_str}' at line {line_num}: {e}")
+                        self.logger.warning(f"Invalid IP network '{ip_str}' at line {line_num}: {e}")
         
         return networks
     
@@ -129,17 +126,17 @@ class GeoIPACLDownloader:
                     if content:
                         networks = self.parse_acl_content(content)
                         all_networks.update(networks)
-                        logger.info(f"Extracted {len(networks)} networks from {url}")
+                        self.logger.info(f"Extracted {len(networks)} networks from {url}")
                     else:
-                        logger.warning(f"No content received from {url}")
+                        self.logger.warning(f"No content received from {url}")
                 except Exception as e:
-                    logger.error(f"Error processing {url}: {e}")
+                    self.logger.error(f"Error processing {url}: {e}")
         
         # Separate IPv4 and IPv6 networks
         ipv4_networks = {net for net in all_networks if net.version == 4}
         ipv6_networks = {net for net in all_networks if net.version == 6}
         
-        logger.info(f"Total networks found: {len(all_networks)} "
+        self.logger.info(f"Total networks found: {len(all_networks)} "
                    f"(IPv4: {len(ipv4_networks)}, IPv6: {len(ipv6_networks)}) for {self.country_code}")
         
         return ipv4_networks, ipv6_networks
@@ -158,6 +155,7 @@ class GeoIPACLDownloader:
         if not networks:
             return set()
         
+        logger = logging.getLogger(__name__)
         logger.info(f"Filtering {len(networks)} networks to remove redundant subnets...")
         
         # Convert to sorted list for efficient processing
@@ -194,7 +192,7 @@ class GeoIPACLDownloader:
             filename: Output filename.
         """
         if not networks:
-            logger.warning(f"No networks to save to {filename}")
+            self.logger.warning(f"No networks to save to {filename}")
             return
         
         try:
@@ -203,9 +201,9 @@ class GeoIPACLDownloader:
                 for net in sorted(networks):
                     f.write(f"{net}\n")
             
-            logger.info(f"Saved {len(networks)} networks to {output_path.absolute()}")
+            self.logger.info(f"Saved {len(networks)} networks to {output_path.absolute()}")
         except IOError as e:
-            logger.error(f"Failed to save networks to {filename}: {e}")
+            self.logger.error(f"Failed to save networks to {filename}: {e}")
             raise
     
     def process(self, ipv4_file: Optional[str] = None, ipv6_file: Optional[str] = None) -> None:
@@ -229,7 +227,7 @@ class GeoIPACLDownloader:
             ipv4_networks, ipv6_networks = self.download_and_parse_all()
             
             if not ipv4_networks and not ipv6_networks:
-                logger.error(f"No networks found for country {self.country_code}. "
+                self.logger.error(f"No networks found for country {self.country_code}. "
                            "Check country code and network connectivity.")
                 return
             
@@ -243,12 +241,12 @@ class GeoIPACLDownloader:
                 self.save_networks_to_file(ipv6_networks, ipv6_file)
             
             elapsed = time.time() - start_time
-            logger.info(f"Processing completed successfully in {elapsed:.2f} seconds")
-            logger.info(f"Final results for {self.country_code}: "
+            self.logger.info(f"Processing completed successfully in {elapsed:.2f} seconds")
+            self.logger.info(f"Final results for {self.country_code}: "
                        f"{len(ipv4_networks)} IPv4 networks, {len(ipv6_networks)} IPv6 networks")
             
         except Exception as e:
-            logger.error(f"Processing failed: {e}")
+            self.logger.error(f"Processing failed: {e}")
             raise
 
 
@@ -325,30 +323,39 @@ def setup_logging(verbose: bool = False, log_file: Optional[str] = None):
     level = logging.DEBUG if verbose else logging.INFO
     log_file = log_file or 'geoip_acl_downloader.log'
     
+    # Clear any existing handlers
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
     # Configure logging
     logging.basicConfig(
         level=level,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(log_file)
+            logging.FileHandler(log_file, encoding='utf-8')
         ]
     )
 
 
 def main():
     """Main function to run the GeoIP ACL downloader."""
+    # Parse arguments first
     args = parse_arguments()
     
-    # Setup logging
+    # Setup logging before anything else
     setup_logging(args.verbose, args.log_file)
+    logger = logging.getLogger(__name__)
     
     # Validate country code
     if len(args.acl) != 2:
         logger.error(f"Country code must be exactly 2 characters. Got: '{args.acl}'")
+        print(f"Error: Country code must be exactly 2 characters. Got: '{args.acl}'")
         sys.exit(1)
     
     logger.info(f"Starting GeoIP ACL downloader for country: {args.acl.upper()}")
+    print(f"🌍 Starting GeoIP ACL downloader for country: {args.acl.upper()}")
     
     try:
         downloader = GeoIPACLDownloader(
@@ -357,12 +364,15 @@ def main():
             timeout=args.timeout
         )
         downloader.process(args.ipv4, args.ipv6)
+        print(f"✅ Download completed successfully!")
         
     except KeyboardInterrupt:
         logger.info("Process interrupted by user")
+        print("\n⛔ Process interrupted by user")
         sys.exit(1)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+        print(f"❌ Error: {e}")
         if args.verbose:
             logger.exception("Full traceback:")
         sys.exit(1)
